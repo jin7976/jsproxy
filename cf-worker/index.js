@@ -1,29 +1,24 @@
 /**
  * jsproxy cfworker api
- * 
- * @update: 2019-05-07
- * @author: EtherDream
- * @see: https://github.com/EtherDream/jsproxy/
+ * https://github.com/EtherDream/jsproxy/
  */
 'use strict'
+
+const JS_VER = 4
 
 const PREFLIGHT_INIT = {
   status: 204,
   headers: new Headers({
     'access-control-allow-origin': '*',
     'access-control-allow-methods': 'GET,POST,PUT,PATCH,TRACE,DELETE,HEAD,OPTIONS',
-    'access-control-allow-headers': '--raw-info,--level,--url,--referer,--cookie,--origin,--ext,--aceh,--ver,--type,--mode,accept,accept-charset,accept-encoding,accept-language,accept-datetime,authorization,cache-control,content-length,content-type,date,if-match,if-modified-since,if-none-match,if-range,if-unmodified-since,max-forwards,pragma,range,te,upgrade,upgrade-insecure-requests,x-requested-with,chrome-proxy',
+    'access-control-allow-headers': '--raw-info,--level,--url,--referer,--cookie,--origin,--ext,--aceh,--ver,--type,--mode,accept,accept-charset,accept-encoding,accept-language,accept-datetime,authorization,cache-control,content-length,content-type,date,if-match,if-modified-since,if-none-match,if-range,if-unmodified-since,max-forwards,pragma,range,te,upgrade,upgrade-insecure-requests,x-requested-with,chrome-proxy,purpose',
     'access-control-max-age': '1728000',
   }),
 }
 
-const pairs = Object.entries
-
 
 addEventListener('fetch', e => {
   const ret = handler(e.request)
-    .catch(err => new Response(err))
-
   e.respondWith(ret)
 })
 
@@ -44,7 +39,7 @@ async function handler(req) {
     return new Response(null, PREFLIGHT_INIT)
   }
 
-  let url = ''
+  let urlObj = null
   let extHdrs = null
   let acehOld = false
   let rawSvr = ''
@@ -63,14 +58,13 @@ async function handler(req) {
     const k2 = k.substr(2)
     switch (k2) {
     case 'url':
-      url = v
+      urlObj = new URL(v)
       break
     case 'aceh':
       acehOld = true
       break
     case 'raw-info':
-      // TODO: ,,
-      [rawSvr, rawLen, rawEtag] = v.split(/,{1,2}/)
+      [rawSvr, rawLen, rawEtag] = v.split('|')
       break
     case 'level':
     case 'mode':
@@ -88,20 +82,27 @@ async function handler(req) {
       break
     }
   }
-
   if (extHdrs) {
-    for (const [k, v] of pairs(extHdrs)) {
+    for (const [k, v] of Object.entries(extHdrs)) {
       reqHdrNew.set(k, v)
     }
   }
-
-  // proxy
-  const res = await fetch(url, {
+  const reqInit = {
     method: req.method,
     headers: reqHdrNew,
-  })
+  }
+  return proxy(urlObj, reqInit, acehOld, rawLen, 0)
+}
 
-  // header filter
+
+/**
+ * 
+ * @param {URL} urlObj 
+ * @param {RequestInit} reqInit 
+ * @param {number} retryTimes 
+ */
+async function proxy(urlObj, reqInit, acehOld, rawLen, retryTimes) {
+  const res = await fetch(urlObj.href, reqInit)
   const resHdrOld = res.headers
   const resHdrNew = new Headers(resHdrOld)
 
@@ -148,29 +149,63 @@ async function handler(req) {
 
   // verify
   const newLen = resHdrOld.get('content-length') || ''
-  const newEtag = resHdrOld.get('etag') || ''
-
   const badLen = (rawLen !== newLen)
-  const badEtag = (rawEtag && rawEtag !== newEtag)
-
-  // resHdrNew.set('--l', rawLen + ',' + newLen)
-  // resHdrNew.set('--e', rawEtag + ',' + newEtag)
 
   let status = 200
   let body = res.body
 
   if (badLen) {
+    if (retryTimes < 1) {
+      urlObj = await parseYtVideoRedir(urlObj, newLen, res)
+      if (urlObj) {
+        return proxy(urlObj, reqInit, acehOld, rawLen, retryTimes + 1)
+      }
+    }
     status = 400
     body = `bad len (old: ${rawLen} new: ${newLen})`
     resHdrNew.set('cache-control', 'no-cache')
   }
-  // else if (badEtag) {
-  //   status = 400
-  //   body = `bad etag (old: ${rawEtag} new: ${newEtag})`
-  // }
+
+  resHdrNew.set('--retry', retryTimes)
+  resHdrNew.set('--ver', JS_VER)
 
   return new Response(body, {
     status,
     headers: resHdrNew,
   })
+}
+
+
+/**
+ * @param {URL} urlObj 
+ */
+function isYtUrl(urlObj) {
+  return (
+    urlObj.host.endsWith('.googlevideo.com') &&
+    urlObj.pathname.startsWith('/videoplayback')
+  )
+}
+
+/**
+ * @param {URL} urlObj 
+ * @param {number} newLen 
+ * @param {Response} res 
+ */
+async function parseYtVideoRedir(urlObj, newLen, res) {
+  if (newLen > 2000) {
+    return null
+  }
+  if (!isYtUrl(urlObj)) {
+    return null
+  }
+  try {
+    const data = await res.text()
+    urlObj = new URL(data)
+  } catch (err) {
+    return null
+  }
+  if (!isYtUrl(urlObj)) {
+    return null
+  }
+  return urlObj
 }

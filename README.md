@@ -1,11 +1,9 @@
-# 演示
-
-https://jsproxy.tk/-----https://www.google.com
-
-（目前仍在更新中，如有问题尝试用隐身模式访问）
-
 
 # 更新
+
+* 2019-06-11 前端脚本调整，首页可离线访问（如果长时间加载中，尝试多刷新几次或者隐身模式访问）
+
+* 2019-05-30 更新 cfworker，对 ytb 视频进行了优化（推荐选 1080p+，不会增加服务器压力）
 
 * 2019-05-29 nginx 增加静态资源服务，可同时支持代理接口和首页访问
 
@@ -31,7 +29,7 @@ curl https://raw.githubusercontent.com/EtherDream/jsproxy/master/i.sh | bash
 测试: `https://服务器IP.xip.io:8443`（具体参考脚本输出）
 
 
-## 部署
+# 部署
 
 Fork 本项目，进入 `gh-pages` 分支，编辑 `conf.js` 文件：
 
@@ -39,7 +37,7 @@ Fork 本项目，进入 `gh-pages` 分支，编辑 `conf.js` 文件：
 
 * 默认节点（`node_default` 字段，指定节点 id）
 
-访问 `https://用户名.github.io/jsproxy` 预览。
+访问 `https://用户名.github.io/jsproxy/index.html` 预览。
 
 GitHub 支持[自定义域名](https://help.github.com/en/articles/using-a-custom-domain-with-github-pages)。也可以将文件发布到自己的 Web 服务器上。
 
@@ -84,6 +82,11 @@ tail server/nginx/logs/proxy.log
 > 需要 root 权限，依赖 `ipset` 命令
 
 该脚本可禁止 `jsporxy` 用户访问保留 IP 段（针对 TCP）。nginx 之外的程序也生效，但不影响其他用户。
+
+
+# 相关文章
+
+* [基于 JS Hook 技术，打造最先进的在线代理](https://github.com/EtherDream/jsproxy/blob/master/docs/blogs/js-hook.md)
 
 
 # 项目特点
